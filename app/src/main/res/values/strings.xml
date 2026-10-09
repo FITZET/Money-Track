@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">钱迹</string>
+    <string name="notification_listener_label">识别微信和支付宝付款通知</string>
+    <string name="notification_channel_name">待分类付款</string>
+    <string name="notification_channel_description">提醒你为刚完成的付款选择类别</string>
+    <string name="regenerate_pdf">重新生成 PDF</string>
+</resources>
