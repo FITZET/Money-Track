@@ -45,6 +45,7 @@ public final class DataBackupActivity extends Activity {
         Ui.pad(root, 22, 20);
         scroll.addView(root);
         setContentView(scroll);
+        Ui.applySystemBars(this, scroll);
 
         root.addView(Ui.text(this, "数据备份与换机", 27, Ui.INK, true));
         TextView version = Ui.text(this, "钱迹 " + versionName(), 13, Ui.MUTED, false);

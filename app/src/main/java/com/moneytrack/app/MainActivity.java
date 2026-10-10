@@ -77,6 +77,7 @@ public final class MainActivity extends Activity {
         root.addView(nav, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 64)));
         setContentView(root);
+        Ui.applySystemBars(this, root);
     }
 
     private void addNav(String label, int tab) {

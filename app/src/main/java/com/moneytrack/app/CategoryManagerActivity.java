@@ -47,6 +47,7 @@ public final class CategoryManagerActivity extends Activity {
         done.setOnClickListener(v -> finish());
         root.addView(done, margins(10, 24));
         setContentView(scroll);
+        Ui.applySystemBars(this, scroll);
         refresh();
     }
 

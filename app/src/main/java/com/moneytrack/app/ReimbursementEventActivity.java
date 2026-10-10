@@ -32,6 +32,7 @@ public final class ReimbursementEventActivity extends Activity {
         Ui.pad(root, 20, 18);
         scroll.addView(root);
         setContentView(scroll);
+        Ui.applySystemBars(this, scroll);
     }
 
     @Override protected void onResume() { super.onResume(); refresh(); }

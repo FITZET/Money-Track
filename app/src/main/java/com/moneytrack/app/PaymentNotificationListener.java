@@ -168,12 +168,11 @@ public final class PaymentNotificationListener extends NotificationListenerServi
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         params.x = Ui.dp(this, 12);
-        params.y = Ui.dp(this, 48);
+        params.y = Ui.dp(this, 12);
         params.width = getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 24);
         try {
             windowManager.addView(card, params);

@@ -1,10 +1,14 @@
 package com.moneytrack.app;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import java.text.NumberFormat;
@@ -56,6 +60,44 @@ final class Ui {
                 dp(view.getContext(), horizontal), dp(view.getContext(), vertical));
     }
 
+    static void applySystemBars(Activity activity, View root) {
+        Window window = activity.getWindow();
+        window.setStatusBarColor(PAPER);
+        window.setNavigationBarColor(CARD);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+
+        final int left = root.getPaddingLeft();
+        final int top = root.getPaddingTop();
+        final int right = root.getPaddingRight();
+        final int bottom = root.getPaddingBottom();
+        root.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+            int insetLeft;
+            int insetTop;
+            int insetRight;
+            int insetBottom;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = windowInsets.getInsetsIgnoringVisibility(
+                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                insetLeft = bars.left;
+                insetTop = bars.top;
+                insetRight = bars.right;
+                insetBottom = bars.bottom;
+            } else {
+                insetLeft = windowInsets.getSystemWindowInsetLeft();
+                insetTop = windowInsets.getSystemWindowInsetTop();
+                insetRight = windowInsets.getSystemWindowInsetRight();
+                insetBottom = windowInsets.getSystemWindowInsetBottom();
+            }
+            view.setPadding(left + insetLeft, top + insetTop,
+                    right + insetRight, bottom + insetBottom);
+            return windowInsets;
+        });
+        root.setFitsSystemWindows(false);
+        root.requestApplyInsets();
+    }
+
     static String money(long cents) {
         NumberFormat format = NumberFormat.getCurrencyInstance(Locale.CHINA);
         return format.format(cents / 100.0);
@@ -63,5 +105,9 @@ final class Ui {
 
     static String date(long millis) {
         return new SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(new Date(millis));
+    }
+
+    static String dateOnly(long millis) {
+        return new SimpleDateFormat("yyyy年M月d日", Locale.CHINA).format(new Date(millis));
     }
 }

@@ -2,6 +2,7 @@ package com.moneytrack.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.content.ClipData;
 import android.database.Cursor;
@@ -29,6 +30,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 public class ExpenseEditorActivity extends Activity {
@@ -49,6 +51,7 @@ public class ExpenseEditorActivity extends Activity {
     private LinearLayout eventArea;
     private Spinner eventInput;
     private TextView highlightHint;
+    private Button dateButton;
     private LinearLayout attachmentsArea;
     private final List<ExpenseAttachment> existingAttachments = new ArrayList<>();
     private final List<ExpenseAttachment> pendingAttachments = new ArrayList<>();
@@ -115,6 +118,11 @@ public class ExpenseEditorActivity extends Activity {
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateHighlight(); }
             @Override public void afterTextChanged(Editable s) {}
         });
+
+        root.addView(label("支出日期"));
+        dateButton = secondaryButton(Ui.dateOnly(expense.expenseTime));
+        dateButton.setOnClickListener(v -> showDatePicker());
+        root.addView(dateButton, fieldParams());
 
         LinearLayout categoryHeader = new LinearLayout(this);
         categoryHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -183,12 +191,28 @@ public class ExpenseEditorActivity extends Activity {
         cancel.setOnClickListener(v -> finish());
         root.addView(cancel, matchWrap(0, 24));
         setContentView(scroll);
+        Ui.applySystemBars(this, scroll);
 
         if (expense.amountCents == 0) {
             amountInput.requestFocus();
             amountInput.postDelayed(() -> ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
                     .showSoftInput(amountInput, InputMethodManager.SHOW_IMPLICIT), 250);
         }
+    }
+
+    private void showDatePicker() {
+        Calendar selected = Calendar.getInstance();
+        selected.setTimeInMillis(expense.expenseTime);
+        DatePickerDialog dialog = new DatePickerDialog(this, (view, year, month, day) -> {
+            Calendar updated = Calendar.getInstance();
+            updated.setTimeInMillis(expense.expenseTime);
+            updated.set(year, month, day);
+            expense.expenseTime = updated.getTimeInMillis();
+            dateButton.setText(Ui.dateOnly(expense.expenseTime));
+        }, selected.get(Calendar.YEAR), selected.get(Calendar.MONTH),
+                selected.get(Calendar.DAY_OF_MONTH));
+        dialog.getDatePicker().setMaxDate(System.currentTimeMillis());
+        dialog.show();
     }
 
     private void loadCategories(String selected) {

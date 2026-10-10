@@ -51,6 +51,7 @@ public final class ExportMaterialsActivity extends Activity {
         Ui.pad(root, 20, 18);
         scroll.addView(root);
         setContentView(scroll);
+        Ui.applySystemBars(this, scroll);
 
         root.addView(Ui.text(this, "合并报销材料", 27, Ui.INK, true));
         TextView subtitle = Ui.text(this, event.title + " · 勾选要导出的支出", 14, Ui.MUTED, false);
