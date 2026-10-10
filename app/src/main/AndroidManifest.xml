@@ -32,6 +32,11 @@
             android:theme="@style/Theme.MoneyTrack" />
 
         <activity
+            android:name=".CategoryExpensesActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MoneyTrack" />
+
+        <activity
             android:name=".ReimbursementEventActivity"
             android:exported="false"
             android:theme="@style/Theme.MoneyTrack" />

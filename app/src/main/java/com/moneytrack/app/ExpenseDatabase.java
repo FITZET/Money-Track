@@ -374,6 +374,17 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         return result;
     }
 
+    public List<Expense> expensesByCategory(String category, long fromInclusive, long toExclusive) {
+        List<Expense> result = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("expenses", null,
+                "category = ? AND expense_time >= ? AND expense_time < ?",
+                new String[]{category, String.valueOf(fromInclusive), String.valueOf(toExclusive)},
+                null, null, "expense_time DESC,id DESC")) {
+            while (cursor.moveToNext()) result.add(fromCursor(cursor));
+        }
+        return result;
+    }
+
     public long totalThisMonth() {
         return sum("expense_time >= ?", new String[]{String.valueOf(monthStart())});
     }

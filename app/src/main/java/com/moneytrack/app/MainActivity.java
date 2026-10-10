@@ -312,13 +312,17 @@ public final class MainActivity extends Activity {
         content.addView(chart, matchWrap(0, 8));
         for (int i = 0; i < totals.size(); i++) {
             CategoryTotal item = totals.get(i);
-            addCategoryLegend(item, total, ExpensePieChart.COLORS[i % ExpensePieChart.COLORS.length]);
+            addCategoryLegend(item, total, ExpensePieChart.COLORS[i % ExpensePieChart.COLORS.length],
+                    start.getTimeInMillis(), end.getTimeInMillis());
         }
     }
 
-    private void addCategoryLegend(CategoryTotal item, long total, int color) {
+    private void addCategoryLegend(CategoryTotal item, long total, int color,
+                                   long fromInclusive, long toExclusive) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(Ui.outlined(this, Ui.CARD, 13, Ui.BORDER));
+        Ui.pad(row, 13, 11);
         TextView dot = Ui.text(this, "●", 18, color, false);
         row.addView(dot, new LinearLayout.LayoutParams(Ui.dp(this, 28), ViewGroup.LayoutParams.WRAP_CONTENT));
         row.addView(Ui.text(this, item.category, 15, Ui.INK, true),
@@ -326,7 +330,16 @@ public final class MainActivity extends Activity {
         double percent = total == 0 ? 0 : item.amountCents * 100.0 / total;
         row.addView(Ui.text(this, Ui.money(item.amountCents) + String.format(Locale.CHINA, "  %.1f%%", percent),
                 14, Ui.MUTED, false));
-        content.addView(row, matchWrap(0, 10));
+        TextView arrow = Ui.text(this, "  ›", 22, Ui.MUTED, false);
+        row.addView(arrow);
+        row.setOnClickListener(v -> {
+            Intent intent = new Intent(this, CategoryExpensesActivity.class);
+            intent.putExtra(CategoryExpensesActivity.EXTRA_CATEGORY, item.category);
+            intent.putExtra(CategoryExpensesActivity.EXTRA_FROM, fromInclusive);
+            intent.putExtra(CategoryExpensesActivity.EXTRA_TO, toExclusive);
+            startActivity(intent);
+        });
+        content.addView(row, matchWrap(0, 8));
     }
 
     private void addHeader(String title, String subtitle) {
