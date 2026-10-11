@@ -16,9 +16,11 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     private static final String[] DEFAULT_CATEGORIES = {
             "吃饭", "零用", "衣服鞋子", "打车", "住宿", "交通", "其他"
     };
+    private final Context context;
 
     public ExpenseDatabase(Context context) {
         super(context.getApplicationContext(), DATABASE_NAME, null, CURRENT_DATABASE_VERSION);
+        this.context = context.getApplicationContext();
     }
 
     @Override
@@ -203,6 +205,28 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
 
     public void deleteAttachment(long id) {
         getWritableDatabase().delete("attachments", "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    public boolean deleteExpense(long id) {
+        Expense expense = get(id);
+        if (expense == null) return false;
+        List<ExpenseAttachment> attachments = attachmentsForExpense(id);
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        int deleted;
+        try {
+            db.delete("attachments", "expense_id = ?", new String[]{String.valueOf(id)});
+            deleted = db.delete("expenses", "id = ?", new String[]{String.valueOf(id)});
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        if (deleted == 0) return false;
+        for (ExpenseAttachment attachment : attachments) {
+            AttachmentStore.deleteIfInternal(context, attachment.uri);
+        }
+        if (expense.reimbursementEventId > 0) refreshEventCompletion(expense.reimbursementEventId);
+        return true;
     }
 
     public int attachmentCount(long expenseId) {

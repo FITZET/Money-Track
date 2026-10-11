@@ -8,7 +8,8 @@ import java.util.regex.Pattern;
 
 public final class PaymentNotificationParser {
     private static final Pattern[] AMOUNT_PATTERNS = new Pattern[]{
-            Pattern.compile("(?:付款|支付|消费|扣款|支出|金额|人民币)[^0-9]{0,10}(?:¥|￥)?\\s*([0-9]+(?:\\.[0-9]{1,2})?)"),
+            Pattern.compile("(?:付款|支付|消费|扣款|支出|金额|人民币)[^0-9¥￥]{0,12}(?:¥|￥)\\s*([0-9]+(?:\\.[0-9]{1,2})?)"),
+            Pattern.compile("(?:付款|支付|消费|扣款|支出|金额|人民币)[^0-9]{0,12}([0-9]+(?:\\.[0-9]{1,2})?)\\s*元"),
             Pattern.compile("(?:¥|￥)\\s*([0-9]+(?:\\.[0-9]{1,2})?)"),
             Pattern.compile("([0-9]+(?:\\.[0-9]{1,2})?)\\s*元")
     };

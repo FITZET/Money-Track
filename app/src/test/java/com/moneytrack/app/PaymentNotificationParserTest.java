@@ -46,4 +46,12 @@ public class PaymentNotificationParserTest {
         assertNull(PaymentNotificationParser.parse(
                 "com.example.mobilebank", "示例银行", "账户动账", "工资收入人民币5000元", null, null));
     }
+
+    @Test
+    public void ignoresPaymentMessageCountsWithoutCurrencyUnit() {
+        assertNull(PaymentNotificationParser.parse(
+                "com.tencent.mm", "微信支付", "支付成功", "2条新消息", null, null));
+        assertNull(PaymentNotificationParser.parse(
+                "com.eg.android.AlipayGphone", "支付宝", "付款成功", "账单更新，共4条", null, null));
+    }
 }

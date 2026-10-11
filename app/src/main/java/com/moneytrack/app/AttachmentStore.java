@@ -62,6 +62,16 @@ public final class AttachmentStore {
                 uri.getPathSegments().size() == 2 && "attachments".equals(uri.getPathSegments().get(0));
     }
 
+    public static void deleteIfInternal(Context context, String uriValue) {
+        if (uriValue == null || uriValue.isEmpty()) return;
+        Uri uri = Uri.parse(uriValue);
+        if (!isInternal(context, uri)) return;
+        String name = uri.getLastPathSegment();
+        if (name != null && name.matches("[A-Za-z0-9._-]+")) {
+            new File(directory(context), name).delete();
+        }
+    }
+
     private static String extension(String displayName, String mimeType) {
         int dot = displayName == null ? -1 : displayName.lastIndexOf('.');
         if (dot >= 0 && dot < displayName.length() - 1) {

@@ -402,7 +402,22 @@ public final class MainActivity extends Activity {
             });
             card.addView(done, matchWrap(10, 0));
         }
-        content.addView(card, matchWrap(0, 10));
+        SwipeDeleteLayout swipe = new SwipeDeleteLayout(this, card, () -> confirmDelete(expense));
+        content.addView(swipe, matchWrap(0, 10));
+    }
+
+    private void confirmDelete(Expense expense) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除这笔记录？")
+                .setMessage(Ui.date(expense.expenseTime) + " · " + expense.category + " · " +
+                        Ui.money(expense.amountCents) + "\n相关附件也会一起删除。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (dialog, which) -> {
+                    if (database.deleteExpense(expense.id)) {
+                        Toast.makeText(this, "记录已删除", Toast.LENGTH_SHORT).show();
+                        showTab(currentTab);
+                    }
+                }).show();
     }
 
     private void addEmpty(String text) {

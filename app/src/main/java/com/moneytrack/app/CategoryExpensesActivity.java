@@ -1,6 +1,7 @@
 package com.moneytrack.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -145,7 +146,19 @@ public final class CategoryExpensesActivity extends Activity {
             intent.putExtra(ExpenseEditorActivity.EXTRA_EXPENSE_ID, expense.id);
             startActivity(intent);
         });
-        root.addView(card, margins(0, 9));
+        SwipeDeleteLayout swipe = new SwipeDeleteLayout(this, card, () -> confirmDelete(expense));
+        root.addView(swipe, margins(0, 9));
+    }
+
+    private void confirmDelete(Expense expense) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除这笔记录？")
+                .setMessage(Ui.date(expense.expenseTime) + " · " + Ui.money(expense.amountCents) +
+                        "\n相关附件也会一起删除。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (dialog, which) -> {
+                    if (database.deleteExpense(expense.id)) refresh();
+                }).show();
     }
 
     private LinearLayout.LayoutParams margins(int top, int bottom) {

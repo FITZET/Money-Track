@@ -1,6 +1,7 @@
 package com.moneytrack.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Paint;
 import android.os.Bundle;
@@ -114,7 +115,19 @@ public final class ReimbursementEventActivity extends Activity {
         check.setOnCheckedChangeListener((button, value) -> {
             database.setExpenseReimbursed(expense.id, value); refresh();
         });
-        root.addView(row, margins(0, 8));
+        SwipeDeleteLayout swipe = new SwipeDeleteLayout(this, row, () -> confirmDelete(expense));
+        root.addView(swipe, margins(0, 8));
+    }
+
+    private void confirmDelete(Expense expense) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除这笔记录？")
+                .setMessage(Ui.date(expense.expenseTime) + " · " + expense.category + " · " +
+                        Ui.money(expense.amountCents) + "\n相关附件也会一起删除。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (dialog, which) -> {
+                    if (database.deleteExpense(expense.id)) refresh();
+                }).show();
     }
 
     private void addEmpty(String message) {

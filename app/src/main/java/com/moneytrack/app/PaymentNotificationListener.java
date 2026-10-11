@@ -61,6 +61,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
                 .putLong("last_notification_at", System.currentTimeMillis()).apply();
         Notification notification = statusBarNotification.getNotification();
         if (notification == null) return;
+        if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
         Bundle extras = notification.extras;
         String appLabel = appLabel(statusBarNotification.getPackageName());
         PaymentNotificationParser.Result result = PaymentNotificationParser.parse(
@@ -83,11 +84,15 @@ public final class PaymentNotificationListener extends NotificationListenerServi
 
     private boolean isDuplicate(PaymentNotificationParser.Result result) {
         long now = System.currentTimeMillis();
-        long previousAmount = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("amount", -1L);
+        String fingerprint = result.source + "\n" + result.amountCents + "\n" +
+                result.merchant + "\n" + result.rawText.replaceAll("\\s+", " ").trim();
+        int currentFingerprint = fingerprint.hashCode();
+        int previousFingerprint = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getInt("fingerprint", Integer.MIN_VALUE);
         long previousTime = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("time", 0L);
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putLong("amount", result.amountCents).putLong("time", now).apply();
-        return result.amountCents == previousAmount && now - previousTime < 45_000L;
+                .putInt("fingerprint", currentFingerprint).putLong("time", now).apply();
+        return currentFingerprint == previousFingerprint && now - previousTime < 45_000L;
     }
 
     private String appLabel(String packageName) {
