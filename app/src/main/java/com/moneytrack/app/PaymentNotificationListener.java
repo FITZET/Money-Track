@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -84,15 +85,31 @@ public final class PaymentNotificationListener extends NotificationListenerServi
 
     private boolean isDuplicate(PaymentNotificationParser.Result result) {
         long now = System.currentTimeMillis();
+        SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
         String fingerprint = result.source + "\n" + result.amountCents + "\n" +
                 result.merchant + "\n" + result.rawText.replaceAll("\\s+", " ").trim();
         int currentFingerprint = fingerprint.hashCode();
-        int previousFingerprint = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getInt("fingerprint", Integer.MIN_VALUE);
-        long previousTime = getSharedPreferences(PREFS, MODE_PRIVATE).getLong("time", 0L);
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putInt("fingerprint", currentFingerprint).putLong("time", now).apply();
-        return currentFingerprint == previousFingerprint && now - previousTime < 45_000L;
+        int previousFingerprint = preferences.getInt("fingerprint", Integer.MIN_VALUE);
+        long previousTime = preferences.getLong("time", 0L);
+        if (currentFingerprint == previousFingerprint && now - previousTime < 45_000L) return true;
+
+        boolean wallet = PaymentDeduplicator.isWallet(result.source);
+        String oppositePrefix = wallet ? "bank_" : "wallet_";
+        long oppositeAmount = preferences.getLong(oppositePrefix + "amount", -1L);
+        long oppositeTime = preferences.getLong(oppositePrefix + "time", 0L);
+        String oppositeSource = preferences.getString(oppositePrefix + "source", "");
+        if (PaymentDeduplicator.isCrossSourceDuplicate(result.amountCents, result.source,
+                oppositeAmount, oppositeSource, now - oppositeTime)) return true;
+
+        String currentPrefix = wallet ? "wallet_" : "bank_";
+        preferences.edit()
+                .putInt("fingerprint", currentFingerprint)
+                .putLong("time", now)
+                .putLong(currentPrefix + "amount", result.amountCents)
+                .putLong(currentPrefix + "time", now)
+                .putString(currentPrefix + "source", result.source)
+                .apply();
+        return false;
     }
 
     private String appLabel(String packageName) {
@@ -168,6 +185,18 @@ public final class PaymentNotificationListener extends NotificationListenerServi
         });
         card.addView(details, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 44)));
+
+        Button ignore = categoryButton("不记账");
+        ignore.setTextColor(Ui.MUTED);
+        ignore.setBackground(Ui.outlined(this, Ui.PAPER, 12, Ui.BORDER));
+        ignore.setOnClickListener(v -> {
+            removeOverlay();
+            Toast.makeText(this, "已忽略这笔付款", Toast.LENGTH_SHORT).show();
+        });
+        LinearLayout.LayoutParams ignoreParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 44));
+        ignoreParams.setMargins(0, Ui.dp(this, 6), 0, 0);
+        card.addView(ignore, ignoreParams);
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,

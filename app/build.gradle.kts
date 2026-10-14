@@ -19,8 +19,8 @@ android {
         applicationId = "com.moneytrack.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.1.5"
+        versionCode = 8
+        versionName = "1.1.6"
 
         testInstrumentationRunner = "android.app.InstrumentationTestRunner"
     }
