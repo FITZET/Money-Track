@@ -17,7 +17,14 @@ final class EntryTypes {
     }
 
     static List<String> fixedCategories(String type) {
-        if (REFUND.equals(type)) return Arrays.asList("退款");
-        return Arrays.asList("工资", "奖金", "兼职", "理财", "红包", "其他收入");
+        return Arrays.asList("退款", "工资", "奖金", "兼职", "理财", "红包", "其他收入");
+    }
+
+    static String typeForIncomeCategory(String category) {
+        return "退款".equals(category) ? REFUND : INCOME;
+    }
+
+    static String inputLabel(String type) {
+        return EXPENSE.equals(type) ? "支出" : "收入";
     }
 }

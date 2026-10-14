@@ -107,7 +107,7 @@ public class ExpenseEditorActivity extends Activity {
                 (expense.source.equals("手动记录") ? "记一笔" : "确认这笔记录");
         root.addView(Ui.text(this, title, 27, Ui.INK, true));
         TextView subtitle = Ui.text(this, expense.source.equals("手动记录") ?
-                "支出、收入和退款都可以记录" : expense.source + " · 确认后分类", 14, Ui.MUTED, false);
+                "记录支出或收入 · 退款在收入类别中" : expense.source + " · 确认后分类", 14, Ui.MUTED, false);
         subtitle.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 20));
         root.addView(subtitle);
 
@@ -115,11 +115,10 @@ public class ExpenseEditorActivity extends Activity {
         typeInput = new Spinner(this);
         typeInput.setBackground(Ui.outlined(this, Ui.CARD, 13, Ui.BORDER));
         typeInput.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), 0);
-        List<String> typeLabels = java.util.Arrays.asList("支出", "收入", "退款");
+        List<String> typeLabels = java.util.Arrays.asList("支出", "收入");
         typeInput.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, typeLabels));
-        typeInput.setSelection(EntryTypes.INCOME.equals(expense.entryType) ? 1 :
-                (EntryTypes.REFUND.equals(expense.entryType) ? 2 : 0));
+        typeInput.setSelection(EntryTypes.EXPENSE.equals(expense.entryType) ? 0 : 1);
         root.addView(typeInput, fieldParams());
 
         root.addView(label("金额"));
@@ -204,11 +203,11 @@ public class ExpenseEditorActivity extends Activity {
         typeInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 String previous = expense.entryType;
-                expense.entryType = position == 1 ? EntryTypes.INCOME :
-                        (position == 2 ? EntryTypes.REFUND : EntryTypes.EXPENSE);
-                String selected = previous.equals(expense.entryType) ? expense.category :
-                        (EntryTypes.REFUND.equals(expense.entryType) ? "退款" :
-                                (EntryTypes.INCOME.equals(expense.entryType) ? "其他收入" : "吃饭"));
+                expense.entryType = position == 1 ? EntryTypes.INCOME : EntryTypes.EXPENSE;
+                boolean stayedInSameGroup = EntryTypes.EXPENSE.equals(previous) ==
+                        EntryTypes.EXPENSE.equals(expense.entryType);
+                String selected = stayedInSameGroup ? expense.category :
+                        (EntryTypes.INCOME.equals(expense.entryType) ? "其他收入" : "吃饭");
                 loadCategories(selected);
                 updateTypeUi();
             }
@@ -447,16 +446,16 @@ public class ExpenseEditorActivity extends Activity {
 
     private String selectedEntryType() {
         if (typeInput == null) return expense.entryType;
-        return typeInput.getSelectedItemPosition() == 1 ? EntryTypes.INCOME :
-                (typeInput.getSelectedItemPosition() == 2 ? EntryTypes.REFUND : EntryTypes.EXPENSE);
+        if (typeInput.getSelectedItemPosition() == 0) return EntryTypes.EXPENSE;
+        Object category = categoryInput == null ? null : categoryInput.getSelectedItem();
+        return EntryTypes.typeForIncomeCategory(category == null ? "" : category.toString());
     }
 
     private void updateTypeUi() {
         boolean isExpense = EntryTypes.EXPENSE.equals(selectedEntryType());
         if (reimbursementArea != null) reimbursementArea.setVisibility(isExpense ? View.VISIBLE : View.GONE);
         if (manageCategories != null) manageCategories.setVisibility(isExpense ? View.VISIBLE : View.GONE);
-        if (categoryLabel != null) categoryLabel.setText(isExpense ? "开销类别" :
-                (EntryTypes.REFUND.equals(selectedEntryType()) ? "退款类别" : "收入类别"));
+        if (categoryLabel != null) categoryLabel.setText(isExpense ? "开销类别" : "收入类别");
         updateHighlight();
     }
 

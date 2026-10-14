@@ -135,7 +135,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = Ui.text(this, result.source + " · " + EntryTypes.label(result.entryType),
+        TextView title = Ui.text(this, result.source + " · " + EntryTypes.inputLabel(result.entryType),
                 15, Ui.MUTED, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = Ui.text(this, "稍后", 13, Ui.MUTED, false);
@@ -157,8 +157,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
             badge.setPadding(0, 0, 0, Ui.dp(this, 8));
             card.addView(badge);
         } else {
-            String promptText = EntryTypes.REFUND.equals(result.entryType) ? "这笔退款来自哪里？" :
-                    (EntryTypes.INCOME.equals(result.entryType) ? "这笔收入是什么？" : "这笔钱花在哪里？");
+            String promptText = expense ? "这笔钱花在哪里？" : "这笔收入是什么？";
             TextView prompt = Ui.text(this, promptText, 13, Ui.MUTED, false);
             prompt.setPadding(0, 0, 0, Ui.dp(this, 8));
             card.addView(prompt);
@@ -238,7 +237,8 @@ public final class PaymentNotificationListener extends NotificationListenerServi
     private void save(PaymentNotificationParser.Result result, String category) {
         Expense expense = new Expense();
         expense.amountCents = result.amountCents;
-        expense.entryType = result.entryType;
+        expense.entryType = EntryTypes.EXPENSE.equals(result.entryType) ? EntryTypes.EXPENSE :
+                EntryTypes.typeForIncomeCategory(category);
         expense.category = category;
         expense.source = result.source;
         expense.merchant = result.merchant;
@@ -280,7 +280,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
 
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID);
         builder.setSmallIcon(com.moneytrack.app.R.drawable.ic_money_track)
-                .setContentTitle(result.source + " " + EntryTypes.label(result.entryType) + " " +
+                .setContentTitle(result.source + " " + EntryTypes.inputLabel(result.entryType) + " " +
                         Ui.money(result.amountCents))
                 .setContentText("点一下确认分类")
                 .setContentIntent(pendingIntent)
