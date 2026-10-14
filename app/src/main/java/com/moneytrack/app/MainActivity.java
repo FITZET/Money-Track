@@ -335,9 +335,11 @@ public final class MainActivity extends Activity {
         }
         if (!totals.isEmpty()) {
             sectionLabel("支出分类");
-            ExpensePieChart chart = new ExpensePieChart(this);
-            chart.setValues(totals);
-            content.addView(chart, matchWrap(0, 8));
+            if (total > 0) {
+                ExpensePieChart chart = new ExpensePieChart(this);
+                chart.setValues(totals);
+                content.addView(chart, matchWrap(0, 8));
+            }
             for (int i = 0; i < totals.size(); i++) {
                 CategoryTotal item = totals.get(i);
                 addCategoryLegend(EntryTypes.EXPENSE, item, total,
@@ -413,7 +415,8 @@ public final class MainActivity extends Activity {
         TextView category = Ui.text(this, typePrefix + expense.category, 16, Ui.INK, true);
         row.addView(category, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
-        TextView amount = Ui.text(this, (outgoing ? "−" : "+") + Ui.money(expense.amountCents), 18,
+        String amountPrefix = expense.amountCents == 0 ? "" : (outgoing ? "−" : "+");
+        TextView amount = Ui.text(this, amountPrefix + Ui.money(expense.amountCents), 18,
                 outgoing ? (expense.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true);
         row.addView(amount);
         card.addView(row);

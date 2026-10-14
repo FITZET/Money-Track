@@ -28,7 +28,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -127,7 +126,8 @@ public class ExpenseEditorActivity extends Activity {
         amountInput = edit("0.00", true);
         amountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER |
                 android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        amountInput.setText(expense.amountCents > 0 ? centsAsInput(expense.amountCents) : "");
+        amountInput.setText(expense.id > 0 || expense.amountCents > 0 ?
+                centsAsInput(expense.amountCents) : "");
         amountInput.setTextSize(28);
         root.addView(amountInput, fieldParams());
 
@@ -234,7 +234,7 @@ public class ExpenseEditorActivity extends Activity {
         setContentView(scroll);
         Ui.applySystemBars(this, scroll);
 
-        if (expense.amountCents == 0) {
+        if (expense.id == 0 && expense.amountCents == 0) {
             amountInput.requestFocus();
             amountInput.postDelayed(() -> ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
                     .showSoftInput(amountInput, InputMethodManager.SHOW_IMPLICIT), 250);
@@ -390,8 +390,13 @@ public class ExpenseEditorActivity extends Activity {
     }
 
     private void save() {
-        long cents = parseCents(amountInput.getText().toString());
-        if (cents <= 0) { amountInput.setError("请输入正确金额"); amountInput.requestFocus(); return; }
+        Long parsedCents = MoneyInput.parseNonNegativeCents(amountInput.getText().toString());
+        if (parsedCents == null) {
+            amountInput.setError("请输入 0 或更大的正确金额");
+            amountInput.requestFocus();
+            return;
+        }
+        long cents = parsedCents;
         if (categories.isEmpty()) { Toast.makeText(this, "请先添加一个类别", Toast.LENGTH_SHORT).show(); return; }
         if (EntryTypes.EXPENSE.equals(selectedEntryType()) &&
                 reimbursableInput.isChecked() && events.isEmpty()) {
@@ -436,7 +441,8 @@ public class ExpenseEditorActivity extends Activity {
     private void updateHighlight() {
         if (highlightHint != null) highlightHint.setVisibility(
                 EntryTypes.EXPENSE.equals(selectedEntryType()) &&
-                        parseCents(amountInput.getText().toString()) > 10000 ? View.VISIBLE : View.GONE);
+                        valueOrZero(MoneyInput.parseNonNegativeCents(
+                                amountInput.getText().toString())) > 10000 ? View.VISIBLE : View.GONE);
     }
 
     private String selectedEntryType() {
@@ -478,10 +484,7 @@ public class ExpenseEditorActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, Ui.dp(this, top), 0, Ui.dp(this, bottom)); return params;
     }
-    private static long parseCents(String input) {
-        try { return new BigDecimal(input.trim().replace(",", "")).setScale(2, RoundingMode.HALF_UP)
-                .movePointRight(2).longValueExact(); } catch (Exception ignored) { return 0L; }
-    }
+    private static long valueOrZero(Long value) { return value == null ? 0L : value; }
     private static String centsAsInput(long cents) { return BigDecimal.valueOf(cents, 2).stripTrailingZeros().toPlainString(); }
     private static String valueOrEmpty(String value) { return value == null ? "" : value; }
 }

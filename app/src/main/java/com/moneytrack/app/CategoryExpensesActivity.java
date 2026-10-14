@@ -110,7 +110,8 @@ public final class CategoryExpensesActivity extends Activity {
         amountRow.addView(Ui.text(this, title, 15, Ui.INK, true),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
-        amountRow.addView(Ui.text(this, (outgoing ? "−" : "+") + Ui.money(expense.amountCents), 18,
+        String amountPrefix = expense.amountCents == 0 ? "" : (outgoing ? "−" : "+");
+        amountRow.addView(Ui.text(this, amountPrefix + Ui.money(expense.amountCents), 18,
                 outgoing ? (expense.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true));
         card.addView(amountRow);
 
