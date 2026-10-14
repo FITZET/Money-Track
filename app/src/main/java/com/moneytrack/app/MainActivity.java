@@ -41,12 +41,14 @@ public final class MainActivity extends Activity {
         PaymentListenerReliability.ensureConnected(this);
         buildShell();
         requestNotificationPermissionIfNeeded();
+        UpdateChecker.check(this);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         PaymentListenerReliability.ensureConnected(this);
+        UpdateChecker.resumePending(this);
         showTab(currentTab);
     }
 
@@ -113,20 +115,31 @@ public final class MainActivity extends Activity {
         totals.setOrientation(LinearLayout.VERTICAL);
         totals.setBackground(Ui.background(this, Ui.GREEN, 22));
         Ui.pad(totals, 20, 18);
-        TextView caption = Ui.text(this, "本月已支出", 14, Color.WHITE, false);
+        long spending = database.totalThisMonth();
+        long refunds = database.refundsThisMonth();
+        long income = database.incomeThisMonth();
+        TextView caption = Ui.text(this, "本月净支出（支出减退款）", 14, Color.WHITE, false);
         caption.setAlpha(0.82f);
         totals.addView(caption);
-        TextView value = Ui.text(this, Ui.money(database.totalThisMonth()), 34, Color.WHITE, true);
+        TextView value = Ui.text(this, Ui.money(spending - refunds), 34, Color.WHITE, true);
         value.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 14));
         totals.addView(value);
 
         LinearLayout split = new LinearLayout(this);
         split.setOrientation(LinearLayout.HORIZONTAL);
-        split.addView(metric("重点开销", database.highlightedThisMonth(), true),
+        split.addView(metric("支出", spending, true),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        split.addView(metric("待报销", database.pendingTotal(), false),
+        split.addView(metric("收入", income, false),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         totals.addView(split);
+        LinearLayout secondSplit = new LinearLayout(this);
+        secondSplit.setOrientation(LinearLayout.HORIZONTAL);
+        secondSplit.setPadding(0, Ui.dp(this, 12), 0, 0);
+        secondSplit.addView(metric("退款", refunds, true),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        secondSplit.addView(metric("待报销", database.pendingTotal(), false),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        totals.addView(secondSplit);
         content.addView(totals, matchWrap(0, 14));
 
         Button add = primaryButton("＋ 记一笔");
@@ -166,7 +179,8 @@ public final class MainActivity extends Activity {
         Ui.pad(panel, 16, 14);
         panel.addView(Ui.text(this, "开启付款后提醒", 16, Ui.INK, true));
         TextView description = Ui.text(this,
-                "识别微信、支付宝和银行 App 的支出通知；悬浮窗用于付款后显示分类卡片。", 13, Ui.MUTED, false);
+                "识别微信、支付宝和银行 App 的支出、收入和退款通知；悬浮窗用于显示分类卡片。",
+                13, Ui.MUTED, false);
         description.setPadding(0, Ui.dp(this, 5), 0, Ui.dp(this, 10));
         panel.addView(description);
         if (!listener) {
@@ -283,9 +297,15 @@ public final class MainActivity extends Activity {
         start.add(Calendar.MONTH, statisticsMonthOffset);
         Calendar end = (Calendar) start.clone();
         end.add(Calendar.MONTH, 1);
-        List<CategoryTotal> totals = database.categoryTotals(start.getTimeInMillis(), end.getTimeInMillis());
-        long total = 0L;
-        for (CategoryTotal item : totals) total += item.amountCents;
+        List<CategoryTotal> totals = database.categoryTotals(
+                EntryTypes.EXPENSE, start.getTimeInMillis(), end.getTimeInMillis());
+        List<CategoryTotal> incomeTotals = database.categoryTotals(
+                EntryTypes.INCOME, start.getTimeInMillis(), end.getTimeInMillis());
+        List<CategoryTotal> refundTotals = database.categoryTotals(
+                EntryTypes.REFUND, start.getTimeInMillis(), end.getTimeInMillis());
+        long total = database.totalForType(EntryTypes.EXPENSE, start.getTimeInMillis(), end.getTimeInMillis());
+        long income = database.totalForType(EntryTypes.INCOME, start.getTimeInMillis(), end.getTimeInMillis());
+        long refunds = database.totalForType(EntryTypes.REFUND, start.getTimeInMillis(), end.getTimeInMillis());
 
         LinearLayout monthRow = new LinearLayout(this);
         monthRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -303,21 +323,45 @@ public final class MainActivity extends Activity {
         monthRow.addView(next, new LinearLayout.LayoutParams(Ui.dp(this, 54), Ui.dp(this, 44)));
         content.addView(monthRow, matchWrap(0, 8));
 
-        TextView totalView = Ui.text(this, "总支出 " + Ui.money(total), 18, Ui.GREEN, true);
+        TextView totalView = Ui.text(this, "支出 " + Ui.money(total) + " · 退款 " + Ui.money(refunds) +
+                " · 净支出 " + Ui.money(total - refunds), 17, Ui.GREEN, true);
         totalView.setGravity(Gravity.CENTER);
         content.addView(totalView, matchWrap(0, 4));
-        if (totals.isEmpty()) { addEmpty("这个月还没有支出记录"); return; }
-        ExpensePieChart chart = new ExpensePieChart(this);
-        chart.setValues(totals);
-        content.addView(chart, matchWrap(0, 8));
-        for (int i = 0; i < totals.size(); i++) {
-            CategoryTotal item = totals.get(i);
-            addCategoryLegend(item, total, ExpensePieChart.COLORS[i % ExpensePieChart.COLORS.length],
-                    start.getTimeInMillis(), end.getTimeInMillis());
+        TextView incomeView = Ui.text(this, "普通收入 " + Ui.money(income), 16, Ui.INK, true);
+        incomeView.setGravity(Gravity.CENTER);
+        content.addView(incomeView, matchWrap(0, 10));
+        if (totals.isEmpty() && incomeTotals.isEmpty() && refundTotals.isEmpty()) {
+            addEmpty("这个月还没有记录"); return;
+        }
+        if (!totals.isEmpty()) {
+            sectionLabel("支出分类");
+            ExpensePieChart chart = new ExpensePieChart(this);
+            chart.setValues(totals);
+            content.addView(chart, matchWrap(0, 8));
+            for (int i = 0; i < totals.size(); i++) {
+                CategoryTotal item = totals.get(i);
+                addCategoryLegend(EntryTypes.EXPENSE, item, total,
+                        ExpensePieChart.COLORS[i % ExpensePieChart.COLORS.length],
+                        start.getTimeInMillis(), end.getTimeInMillis());
+            }
+        }
+        if (!incomeTotals.isEmpty()) {
+            sectionLabel("收入分类");
+            for (int i = 0; i < incomeTotals.size(); i++) {
+                addCategoryLegend(EntryTypes.INCOME, incomeTotals.get(i), income, Ui.GREEN,
+                        start.getTimeInMillis(), end.getTimeInMillis());
+            }
+        }
+        if (!refundTotals.isEmpty()) {
+            sectionLabel("退款记录");
+            for (CategoryTotal item : refundTotals) {
+                addCategoryLegend(EntryTypes.REFUND, item, refunds, Ui.GREEN,
+                        start.getTimeInMillis(), end.getTimeInMillis());
+            }
         }
     }
 
-    private void addCategoryLegend(CategoryTotal item, long total, int color,
+    private void addCategoryLegend(String entryType, CategoryTotal item, long total, int color,
                                    long fromInclusive, long toExclusive) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -334,6 +378,7 @@ public final class MainActivity extends Activity {
         row.addView(arrow);
         row.setOnClickListener(v -> {
             Intent intent = new Intent(this, CategoryExpensesActivity.class);
+            intent.putExtra(CategoryExpensesActivity.EXTRA_ENTRY_TYPE, entryType);
             intent.putExtra(CategoryExpensesActivity.EXTRA_CATEGORY, item.category);
             intent.putExtra(CategoryExpensesActivity.EXTRA_FROM, fromInclusive);
             intent.putExtra(CategoryExpensesActivity.EXTRA_TO, toExclusive);
@@ -363,10 +408,13 @@ public final class MainActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView category = Ui.text(this, expense.category, 16, Ui.INK, true);
+        String typePrefix = EntryTypes.EXPENSE.equals(expense.entryType) ? "" :
+                EntryTypes.label(expense.entryType) + " · ";
+        TextView category = Ui.text(this, typePrefix + expense.category, 16, Ui.INK, true);
         row.addView(category, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView amount = Ui.text(this, Ui.money(expense.amountCents), 18,
-                expense.amountCents > 10000 ? Ui.AMBER : Ui.INK, true);
+        boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
+        TextView amount = Ui.text(this, (outgoing ? "−" : "+") + Ui.money(expense.amountCents), 18,
+                outgoing ? (expense.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true);
         row.addView(amount);
         card.addView(row);
 

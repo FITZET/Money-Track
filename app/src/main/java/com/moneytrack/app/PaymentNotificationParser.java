@@ -16,8 +16,14 @@ public final class PaymentNotificationParser {
     private static final String[] SUCCESS_WORDS = {
             "支付成功", "付款成功", "扣款成功", "消费成功", "已支付", "成功付款", "收款方"
     };
+    private static final String[] REFUND_WORDS = {
+            "退款成功", "退款到账", "已退款", "退回", "退款"
+    };
+    private static final String[] INCOME_WORDS = {
+            "收款到账", "收到一笔", "转入", "收入", "入账", "工资到账"
+    };
     private static final String[] REJECT_WORDS = {
-            "退款", "收款到账", "收到一笔", "转入", "收入", "入账", "余额变动", "验证码", "失败", "取消"
+            "验证码", "失败", "取消"
     };
     private static final String[] BANK_OUTGOING_WORDS = {
             "支出", "消费", "扣款", "转出", "支付", "交易成功", "付款"
@@ -36,10 +42,18 @@ public final class PaymentNotificationParser {
         if (source == null) return null;
 
         String combined = join(title, text, bigText, subText);
-        boolean paymentApp = "微信支付".equals(source) || "支付宝".equals(source);
-        boolean expenseSignal = paymentApp ? containsAny(combined, SUCCESS_WORDS) :
-                containsAny(combined, BANK_OUTGOING_WORDS);
-        if (!expenseSignal || containsAny(combined, REJECT_WORDS)) return null;
+        if (containsAny(combined, REJECT_WORDS)) return null;
+        String entryType;
+        if (containsAny(combined, REFUND_WORDS)) entryType = EntryTypes.REFUND;
+        else if (containsAny(combined, INCOME_WORDS)) entryType = EntryTypes.INCOME;
+        else {
+            boolean paymentApp = "微信支付".equals(source) || "支付宝".equals(source);
+            boolean expenseSignal = paymentApp ? containsAny(combined, SUCCESS_WORDS) :
+                    containsAny(combined, BANK_OUTGOING_WORDS);
+            if (expenseSignal) entryType = EntryTypes.EXPENSE;
+            else if (combined.contains("到账")) entryType = EntryTypes.INCOME;
+            else return null;
+        }
 
         for (Pattern pattern : AMOUNT_PATTERNS) {
             Matcher matcher = pattern.matcher(combined);
@@ -50,7 +64,7 @@ public final class PaymentNotificationParser {
                             .movePointRight(2)
                             .longValueExact();
                     if (cents <= 0 || cents > 100_000_000_00L) return null;
-                    return new Result(cents, source, merchantFrom(title, text), combined);
+                    return new Result(cents, source, merchantFrom(title, text), combined, entryType);
                 } catch (ArithmeticException | NumberFormatException ignored) {
                     return null;
                 }
@@ -100,12 +114,14 @@ public final class PaymentNotificationParser {
         public final String source;
         public final String merchant;
         public final String rawText;
+        public final String entryType;
 
-        Result(long amountCents, String source, String merchant, String rawText) {
+        Result(long amountCents, String source, String merchant, String rawText, String entryType) {
             this.amountCents = amountCents;
             this.source = source;
             this.merchant = merchant;
             this.rawText = rawText;
+            this.entryType = entryType;
         }
     }
 }

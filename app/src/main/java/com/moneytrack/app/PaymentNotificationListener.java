@@ -86,7 +86,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
     private boolean isDuplicate(PaymentNotificationParser.Result result) {
         long now = System.currentTimeMillis();
         SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
-        String fingerprint = result.source + "\n" + result.amountCents + "\n" +
+        String fingerprint = result.source + "\n" + result.entryType + "\n" + result.amountCents + "\n" +
                 result.merchant + "\n" + result.rawText.replaceAll("\\s+", " ").trim();
         int currentFingerprint = fingerprint.hashCode();
         int previousFingerprint = preferences.getInt("fingerprint", Integer.MIN_VALUE);
@@ -98,8 +98,9 @@ public final class PaymentNotificationListener extends NotificationListenerServi
         long oppositeAmount = preferences.getLong(oppositePrefix + "amount", -1L);
         long oppositeTime = preferences.getLong(oppositePrefix + "time", 0L);
         String oppositeSource = preferences.getString(oppositePrefix + "source", "");
-        if (PaymentDeduplicator.isCrossSourceDuplicate(result.amountCents, result.source,
-                oppositeAmount, oppositeSource, now - oppositeTime)) return true;
+        String oppositeType = preferences.getString(oppositePrefix + "type", "");
+        if (PaymentDeduplicator.isCrossSourceDuplicate(result.amountCents, result.source, result.entryType,
+                oppositeAmount, oppositeSource, oppositeType, now - oppositeTime)) return true;
 
         String currentPrefix = wallet ? "wallet_" : "bank_";
         preferences.edit()
@@ -108,6 +109,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
                 .putLong(currentPrefix + "amount", result.amountCents)
                 .putLong(currentPrefix + "time", now)
                 .putString(currentPrefix + "source", result.source)
+                .putString(currentPrefix + "type", result.entryType)
                 .apply();
         return false;
     }
@@ -133,7 +135,8 @@ public final class PaymentNotificationListener extends NotificationListenerServi
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = Ui.text(this, result.source + "付款", 15, Ui.MUTED, true);
+        TextView title = Ui.text(this, result.source + " · " + EntryTypes.label(result.entryType),
+                15, Ui.MUTED, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = Ui.text(this, "稍后", 13, Ui.MUTED, false);
         close.setPadding(Ui.dp(this, 12), Ui.dp(this, 6), 0, Ui.dp(this, 6));
@@ -144,21 +147,25 @@ public final class PaymentNotificationListener extends NotificationListenerServi
         titleRow.addView(close);
         card.addView(titleRow);
 
-        TextView amount = Ui.text(this, Ui.money(result.amountCents), 30,
-                result.amountCents > 10000 ? Ui.AMBER : Ui.INK, true);
+        boolean expense = EntryTypes.EXPENSE.equals(result.entryType);
+        TextView amount = Ui.text(this, (expense ? "−" : "+") + Ui.money(result.amountCents), 30,
+                expense ? (result.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true);
         amount.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 4));
         card.addView(amount);
-        if (result.amountCents > 10000) {
+        if (expense && result.amountCents > 10000) {
             TextView badge = Ui.text(this, "超过 100 元 · 重点开销", 12, Ui.AMBER, true);
             badge.setPadding(0, 0, 0, Ui.dp(this, 8));
             card.addView(badge);
         } else {
-            TextView prompt = Ui.text(this, "这笔钱花在哪里？", 13, Ui.MUTED, false);
+            String promptText = EntryTypes.REFUND.equals(result.entryType) ? "这笔退款来自哪里？" :
+                    (EntryTypes.INCOME.equals(result.entryType) ? "这笔收入是什么？" : "这笔钱花在哪里？");
+            TextView prompt = Ui.text(this, promptText, 13, Ui.MUTED, false);
             prompt.setPadding(0, 0, 0, Ui.dp(this, 8));
             card.addView(prompt);
         }
 
-        List<String> categories = new ExpenseDatabase(this).activeCategories();
+        List<String> categories = expense ? new ExpenseDatabase(this).activeCategories() :
+                EntryTypes.fixedCategories(result.entryType);
         int shown = Math.min(6, categories.size());
         int rowCount = (shown + 2) / 3;
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
@@ -178,7 +185,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
             }
             card.addView(row);
         }
-        Button details = categoryButton("需要报销 / 更多类别");
+        Button details = categoryButton(expense ? "需要报销 / 更多类别" : "补充详细信息");
         details.setOnClickListener(v -> {
             removeOverlay();
             openCaptureEditor(result);
@@ -231,6 +238,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
     private void save(PaymentNotificationParser.Result result, String category) {
         Expense expense = new Expense();
         expense.amountCents = result.amountCents;
+        expense.entryType = result.entryType;
         expense.category = category;
         expense.source = result.source;
         expense.merchant = result.merchant;
@@ -244,6 +252,7 @@ public final class PaymentNotificationListener extends NotificationListenerServi
         intent.putExtra(ExpenseEditorActivity.EXTRA_AMOUNT_CENTS, result.amountCents);
         intent.putExtra(ExpenseEditorActivity.EXTRA_SOURCE, result.source);
         intent.putExtra(ExpenseEditorActivity.EXTRA_MERCHANT, result.merchant);
+        intent.putExtra(ExpenseEditorActivity.EXTRA_ENTRY_TYPE, result.entryType);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
     }
@@ -264,14 +273,16 @@ public final class PaymentNotificationListener extends NotificationListenerServi
         intent.putExtra(ExpenseEditorActivity.EXTRA_AMOUNT_CENTS, result.amountCents);
         intent.putExtra(ExpenseEditorActivity.EXTRA_SOURCE, result.source);
         intent.putExtra(ExpenseEditorActivity.EXTRA_MERCHANT, result.merchant);
+        intent.putExtra(ExpenseEditorActivity.EXTRA_ENTRY_TYPE, result.entryType);
         int requestCode = (int) (System.currentTimeMillis() & 0x7fffffff);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, requestCode, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID);
         builder.setSmallIcon(com.moneytrack.app.R.drawable.ic_money_track)
-                .setContentTitle(result.source + " " + Ui.money(result.amountCents))
-                .setContentText("点一下选择开销类别")
+                .setContentTitle(result.source + " " + EntryTypes.label(result.entryType) + " " +
+                        Ui.money(result.amountCents))
+                .setContentText("点一下确认分类")
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_REMINDER)

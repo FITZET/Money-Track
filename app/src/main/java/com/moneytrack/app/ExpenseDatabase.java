@@ -12,7 +12,7 @@ import java.util.List;
 
 public final class ExpenseDatabase extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "money_track.db";
-    public static final int CURRENT_DATABASE_VERSION = 3;
+    public static final int CURRENT_DATABASE_VERSION = 4;
     private static final String[] DEFAULT_CATEGORIES = {
             "吃饭", "零用", "衣服鞋子", "打车", "住宿", "交通", "其他"
     };
@@ -28,6 +28,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE expenses (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "amount_cents INTEGER NOT NULL," +
+                "entry_type TEXT NOT NULL DEFAULT 'expense'," +
                 "category TEXT NOT NULL," +
                 "note TEXT NOT NULL DEFAULT ''," +
                 "merchant TEXT NOT NULL DEFAULT ''," +
@@ -42,6 +43,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         createSupportingTables(db);
         createAttachmentsTable(db);
         db.execSQL("CREATE INDEX expenses_time_idx ON expenses(expense_time DESC)");
+        db.execSQL("CREATE INDEX expenses_type_time_idx ON expenses(entry_type,expense_time DESC)");
         db.execSQL("CREATE INDEX expenses_reimburse_idx ON expenses(reimbursable, reimbursed)");
         db.execSQL("CREATE INDEX expenses_event_idx ON expenses(reimbursement_event_id, reimbursed)");
     }
@@ -59,6 +61,10 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
             db.execSQL("INSERT INTO attachments(expense_id,uri,mime_type,display_name,sort_order,created_at) " +
                     "SELECT id,receipt_uri,'image/*','原凭证',0,created_at FROM expenses " +
                     "WHERE receipt_uri IS NOT NULL AND receipt_uri <> ''");
+        }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE expenses ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'expense'");
+            db.execSQL("CREATE INDEX IF NOT EXISTS expenses_type_time_idx ON expenses(entry_type,expense_time DESC)");
         }
     }
 
@@ -387,22 +393,24 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
                 new String[]{String.valueOf(eventId)});
     }
 
-    public List<CategoryTotal> categoryTotals(long fromInclusive, long toExclusive) {
+    public List<CategoryTotal> categoryTotals(String entryType, long fromInclusive, long toExclusive) {
         List<CategoryTotal> result = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().rawQuery(
                 "SELECT category,SUM(amount_cents) total FROM expenses " +
-                        "WHERE expense_time>=? AND expense_time<? GROUP BY category ORDER BY total DESC",
-                new String[]{String.valueOf(fromInclusive), String.valueOf(toExclusive)})) {
+                        "WHERE entry_type=? AND expense_time>=? AND expense_time<? " +
+                        "GROUP BY category ORDER BY total DESC",
+                new String[]{entryType, String.valueOf(fromInclusive), String.valueOf(toExclusive)})) {
             while (cursor.moveToNext()) result.add(new CategoryTotal(cursor.getString(0), cursor.getLong(1)));
         }
         return result;
     }
 
-    public List<Expense> expensesByCategory(String category, long fromInclusive, long toExclusive) {
+    public List<Expense> expensesByCategory(String entryType, String category,
+                                            long fromInclusive, long toExclusive) {
         List<Expense> result = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query("expenses", null,
-                "category = ? AND expense_time >= ? AND expense_time < ?",
-                new String[]{category, String.valueOf(fromInclusive), String.valueOf(toExclusive)},
+                "entry_type = ? AND category = ? AND expense_time >= ? AND expense_time < ?",
+                new String[]{entryType, category, String.valueOf(fromInclusive), String.valueOf(toExclusive)},
                 null, null, "expense_time DESC,id DESC")) {
             while (cursor.moveToNext()) result.add(fromCursor(cursor));
         }
@@ -410,12 +418,30 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     }
 
     public long totalThisMonth() {
-        return sum("expense_time >= ?", new String[]{String.valueOf(monthStart())});
+        return totalForTypeSince(EntryTypes.EXPENSE, monthStart());
+    }
+
+    public long incomeThisMonth() {
+        return totalForTypeSince(EntryTypes.INCOME, monthStart());
+    }
+
+    public long refundsThisMonth() {
+        return totalForTypeSince(EntryTypes.REFUND, monthStart());
+    }
+
+    public long totalForType(String entryType, long fromInclusive, long toExclusive) {
+        return sum("entry_type = ? AND expense_time >= ? AND expense_time < ?",
+                new String[]{entryType, String.valueOf(fromInclusive), String.valueOf(toExclusive)});
+    }
+
+    private long totalForTypeSince(String entryType, long fromInclusive) {
+        return sum("entry_type = ? AND expense_time >= ?",
+                new String[]{entryType, String.valueOf(fromInclusive)});
     }
 
     public long highlightedThisMonth() {
-        return sum("expense_time >= ? AND amount_cents > 10000",
-                new String[]{String.valueOf(monthStart())});
+        return sum("entry_type = ? AND expense_time >= ? AND amount_cents > 10000",
+                new String[]{EntryTypes.EXPENSE, String.valueOf(monthStart())});
     }
 
     public long pendingTotal() {
@@ -443,6 +469,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     private ContentValues toValues(Expense expense) {
         ContentValues values = new ContentValues();
         values.put("amount_cents", expense.amountCents);
+        values.put("entry_type", safe(expense.entryType));
         values.put("category", expense.category);
         values.put("note", safe(expense.note));
         values.put("merchant", safe(expense.merchant));
@@ -460,6 +487,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         Expense expense = new Expense();
         expense.id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
         expense.amountCents = cursor.getLong(cursor.getColumnIndexOrThrow("amount_cents"));
+        expense.entryType = cursor.getString(cursor.getColumnIndexOrThrow("entry_type"));
         expense.category = cursor.getString(cursor.getColumnIndexOrThrow("category"));
         expense.note = cursor.getString(cursor.getColumnIndexOrThrow("note"));
         expense.merchant = cursor.getString(cursor.getColumnIndexOrThrow("merchant"));

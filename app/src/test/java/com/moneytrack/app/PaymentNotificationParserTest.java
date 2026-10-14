@@ -12,6 +12,7 @@ public class PaymentNotificationParserTest {
         assertNotNull(result);
         assertEquals(12850L, result.amountCents);
         assertEquals("微信支付", result.source);
+        assertEquals(EntryTypes.EXPENSE, result.entryType);
     }
 
     @Test
@@ -23,11 +24,23 @@ public class PaymentNotificationParserTest {
     }
 
     @Test
-    public void ignoresRefundAndIncomingMoney() {
-        assertNull(PaymentNotificationParser.parse("com.tencent.mm", "微信支付",
-                "退款成功 50元", null, null));
-        assertNull(PaymentNotificationParser.parse("com.eg.android.AlipayGphone", "支付宝",
-                "收款到账 50元", null, null));
+    public void parsesRefundAndIncomingMoney() {
+        PaymentNotificationParser.Result refund = PaymentNotificationParser.parse(
+                "com.tencent.mm", "微信支付", "退款成功 50元", null, null);
+        assertNotNull(refund);
+        assertEquals(EntryTypes.REFUND, refund.entryType);
+        PaymentNotificationParser.Result income = PaymentNotificationParser.parse(
+                "com.eg.android.AlipayGphone", "支付宝", "收款到账 50元", null, null);
+        assertNotNull(income);
+        assertEquals(EntryTypes.INCOME, income.entryType);
+        PaymentNotificationParser.Result bankCredit = PaymentNotificationParser.parse(
+                "com.example.mobilebank", "示例银行", "账户余额变动提醒", "人民币80元已到账", null, null);
+        assertNotNull(bankCredit);
+        assertEquals(EntryTypes.INCOME, bankCredit.entryType);
+        PaymentNotificationParser.Result paymentWithPoints = PaymentNotificationParser.parse(
+                "com.tencent.mm", "微信支付", "支付成功 20元", "积分已到账", null, null);
+        assertNotNull(paymentWithPoints);
+        assertEquals(EntryTypes.EXPENSE, paymentWithPoints.entryType);
     }
 
     @Test
@@ -43,8 +56,10 @@ public class PaymentNotificationParserTest {
         assertNotNull(expense);
         assertEquals(8820L, expense.amountCents);
         assertEquals("示例银行", expense.source);
-        assertNull(PaymentNotificationParser.parse(
-                "com.example.mobilebank", "示例银行", "账户动账", "工资收入人民币5000元", null, null));
+        PaymentNotificationParser.Result income = PaymentNotificationParser.parse(
+                "com.example.mobilebank", "示例银行", "账户动账", "工资收入人民币5000元", null, null);
+        assertNotNull(income);
+        assertEquals(EntryTypes.INCOME, income.entryType);
     }
 
     @Test

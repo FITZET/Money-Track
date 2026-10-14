@@ -20,10 +20,12 @@ public final class CategoryExpensesActivity extends Activity {
     public static final String EXTRA_CATEGORY = "category";
     public static final String EXTRA_FROM = "from";
     public static final String EXTRA_TO = "to";
+    public static final String EXTRA_ENTRY_TYPE = "entry_type";
 
     private ExpenseDatabase database;
     private LinearLayout root;
     private String category;
+    private String entryType;
     private long fromInclusive;
     private long toExclusive;
 
@@ -32,6 +34,10 @@ public final class CategoryExpensesActivity extends Activity {
         super.onCreate(savedInstanceState);
         database = new ExpenseDatabase(this);
         category = getIntent().getStringExtra(EXTRA_CATEGORY);
+        entryType = getIntent().getStringExtra(EXTRA_ENTRY_TYPE);
+        if (!EntryTypes.INCOME.equals(entryType) && !EntryTypes.REFUND.equals(entryType)) {
+            entryType = EntryTypes.EXPENSE;
+        }
         fromInclusive = getIntent().getLongExtra(EXTRA_FROM, 0L);
         toExclusive = getIntent().getLongExtra(EXTRA_TO, 0L);
         if (category == null || category.trim().isEmpty() || fromInclusive <= 0L || toExclusive <= fromInclusive) {
@@ -57,7 +63,8 @@ public final class CategoryExpensesActivity extends Activity {
 
     private void refresh() {
         root.removeAllViews();
-        List<Expense> expenses = database.expensesByCategory(category, fromInclusive, toExclusive);
+        List<Expense> expenses = database.expensesByCategory(
+                entryType, category, fromInclusive, toExclusive);
         long total = 0L;
         for (Expense expense : expenses) total += expense.amountCents;
 
@@ -71,7 +78,7 @@ public final class CategoryExpensesActivity extends Activity {
         back.setOnClickListener(v -> finish());
         root.addView(back, margins(0, 4));
 
-        root.addView(Ui.text(this, category + "明细", 27, Ui.INK, true));
+        root.addView(Ui.text(this, EntryTypes.label(entryType) + " · " + category, 27, Ui.INK, true));
         String month = new SimpleDateFormat("yyyy年M月", Locale.CHINA).format(new Date(fromInclusive));
         TextView summary = Ui.text(this,
                 month + " · " + expenses.size() + " 笔 · 共 " + Ui.money(total),
@@ -80,7 +87,7 @@ public final class CategoryExpensesActivity extends Activity {
         root.addView(summary);
 
         if (expenses.isEmpty()) {
-            TextView empty = Ui.text(this, "这个分类在所选月份没有支出", 14, Ui.MUTED, false);
+            TextView empty = Ui.text(this, "这个分类在所选月份没有记录", 14, Ui.MUTED, false);
             empty.setGravity(Gravity.CENTER);
             empty.setBackground(Ui.background(this, Ui.CARD, 15));
             Ui.pad(empty, 16, 28);
@@ -99,11 +106,12 @@ public final class CategoryExpensesActivity extends Activity {
         LinearLayout amountRow = new LinearLayout(this);
         amountRow.setGravity(Gravity.CENTER_VERTICAL);
         String title = expense.merchant.isEmpty() ? expense.source : expense.merchant;
-        if (title.isEmpty()) title = "支出";
+        if (title.isEmpty()) title = EntryTypes.label(expense.entryType);
         amountRow.addView(Ui.text(this, title, 15, Ui.INK, true),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        amountRow.addView(Ui.text(this, Ui.money(expense.amountCents), 18,
-                expense.amountCents > 10000 ? Ui.AMBER : Ui.INK, true));
+        boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
+        amountRow.addView(Ui.text(this, (outgoing ? "−" : "+") + Ui.money(expense.amountCents), 18,
+                outgoing ? (expense.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true));
         card.addView(amountRow);
 
         TextView date = Ui.text(this, Ui.date(expense.expenseTime), 12, Ui.MUTED, false);

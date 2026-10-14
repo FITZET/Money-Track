@@ -3,6 +3,7 @@ package com.moneytrack.app;
 public final class Expense {
     public long id;
     public long amountCents;
+    public String entryType;
     public String category;
     public String note;
     public String merchant;
@@ -15,6 +16,7 @@ public final class Expense {
     public String receiptUri;
 
     public Expense() {
+        entryType = EntryTypes.EXPENSE;
         category = "吃饭";
         note = "";
         merchant = "";

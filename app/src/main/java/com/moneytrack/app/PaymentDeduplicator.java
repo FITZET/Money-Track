@@ -9,10 +9,11 @@ final class PaymentDeduplicator {
         return "微信支付".equals(source) || "支付宝".equals(source);
     }
 
-    static boolean isCrossSourceDuplicate(long currentAmount, String currentSource,
-                                          long previousAmount, String previousSource,
+    static boolean isCrossSourceDuplicate(long currentAmount, String currentSource, String currentType,
+                                          long previousAmount, String previousSource, String previousType,
                                           long elapsedMillis) {
         if (currentAmount <= 0L || currentAmount != previousAmount) return false;
+        if (!currentType.equals(previousType)) return false;
         if (elapsedMillis < 0L || elapsedMillis > CROSS_SOURCE_WINDOW_MS) return false;
         return isWallet(currentSource) != isWallet(previousSource);
     }

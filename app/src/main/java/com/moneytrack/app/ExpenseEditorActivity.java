@@ -17,6 +17,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -39,18 +40,23 @@ public class ExpenseEditorActivity extends Activity {
     public static final String EXTRA_SOURCE = "source";
     public static final String EXTRA_MERCHANT = "merchant";
     public static final String EXTRA_REIMBURSEMENT_EVENT_ID = "reimbursement_event_id";
+    public static final String EXTRA_ENTRY_TYPE = "entry_type";
     private static final int REQUEST_RECEIPT = 21;
 
     private ExpenseDatabase database;
     private Expense expense;
     private EditText amountInput;
+    private Spinner typeInput;
     private Spinner categoryInput;
     private EditText merchantInput;
     private EditText noteInput;
     private CheckBox reimbursableInput;
     private LinearLayout eventArea;
+    private LinearLayout reimbursementArea;
     private Spinner eventInput;
     private TextView highlightHint;
+    private TextView categoryLabel;
+    private TextView manageCategories;
     private Button dateButton;
     private LinearLayout attachmentsArea;
     private final List<ExpenseAttachment> existingAttachments = new ArrayList<>();
@@ -71,6 +77,11 @@ public class ExpenseEditorActivity extends Activity {
             expense.source = valueOrEmpty(getIntent().getStringExtra(EXTRA_SOURCE));
             if (expense.source.isEmpty()) expense.source = "手动记录";
             expense.merchant = valueOrEmpty(getIntent().getStringExtra(EXTRA_MERCHANT));
+            String requestedType = getIntent().getStringExtra(EXTRA_ENTRY_TYPE);
+            if (EntryTypes.INCOME.equals(requestedType) || EntryTypes.REFUND.equals(requestedType)) {
+                expense.entryType = requestedType;
+                expense.category = EntryTypes.REFUND.equals(requestedType) ? "退款" : "其他收入";
+            }
             expense.reimbursementEventId = getIntent().getLongExtra(EXTRA_REIMBURSEMENT_EVENT_ID, 0L);
             expense.reimbursable = expense.reimbursementEventId > 0;
         }
@@ -94,12 +105,23 @@ public class ExpenseEditorActivity extends Activity {
         scroll.addView(root);
 
         String title = expense.id > 0 ? "编辑记录" :
-                (expense.source.equals("手动记录") ? "记一笔" : "确认这笔付款");
+                (expense.source.equals("手动记录") ? "记一笔" : "确认这笔记录");
         root.addView(Ui.text(this, title, 27, Ui.INK, true));
         TextView subtitle = Ui.text(this, expense.source.equals("手动记录") ?
-                "花在哪儿，简单记一下" : expense.source + " · 付款后分类", 14, Ui.MUTED, false);
+                "支出、收入和退款都可以记录" : expense.source + " · 确认后分类", 14, Ui.MUTED, false);
         subtitle.setPadding(0, Ui.dp(this, 3), 0, Ui.dp(this, 20));
         root.addView(subtitle);
+
+        root.addView(label("记录类型"));
+        typeInput = new Spinner(this);
+        typeInput.setBackground(Ui.outlined(this, Ui.CARD, 13, Ui.BORDER));
+        typeInput.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), 0);
+        List<String> typeLabels = java.util.Arrays.asList("支出", "收入", "退款");
+        typeInput.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, typeLabels));
+        typeInput.setSelection(EntryTypes.INCOME.equals(expense.entryType) ? 1 :
+                (EntryTypes.REFUND.equals(expense.entryType) ? 2 : 0));
+        root.addView(typeInput, fieldParams());
 
         root.addView(label("金额"));
         amountInput = edit("0.00", true);
@@ -119,19 +141,20 @@ public class ExpenseEditorActivity extends Activity {
             @Override public void afterTextChanged(Editable s) {}
         });
 
-        root.addView(label("支出日期"));
+        root.addView(label("发生日期"));
         dateButton = secondaryButton(Ui.dateOnly(expense.expenseTime));
         dateButton.setOnClickListener(v -> showDatePicker());
         root.addView(dateButton, fieldParams());
 
         LinearLayout categoryHeader = new LinearLayout(this);
         categoryHeader.setGravity(Gravity.CENTER_VERTICAL);
-        categoryHeader.addView(label("开销类别"), new LinearLayout.LayoutParams(0,
+        categoryLabel = label("开销类别");
+        categoryHeader.addView(categoryLabel, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView manage = Ui.text(this, "管理类别", 13, Ui.GREEN, true);
-        manage.setPadding(Ui.dp(this, 10), Ui.dp(this, 5), 0, Ui.dp(this, 7));
-        manage.setOnClickListener(v -> startActivity(new Intent(this, CategoryManagerActivity.class)));
-        categoryHeader.addView(manage);
+        manageCategories = Ui.text(this, "管理类别", 13, Ui.GREEN, true);
+        manageCategories.setPadding(Ui.dp(this, 10), Ui.dp(this, 5), 0, Ui.dp(this, 7));
+        manageCategories.setOnClickListener(v -> startActivity(new Intent(this, CategoryManagerActivity.class)));
+        categoryHeader.addView(manageCategories);
         root.addView(categoryHeader);
         categoryInput = new Spinner(this);
         categoryInput.setBackground(Ui.outlined(this, Ui.CARD, 13, Ui.BORDER));
@@ -139,8 +162,8 @@ public class ExpenseEditorActivity extends Activity {
         root.addView(categoryInput, fieldParams());
         loadCategories(expense.category);
 
-        root.addView(label("商户或用途（可选）"));
-        merchantInput = edit("例如：高铁票、某某餐厅", true);
+        root.addView(label("来源、商户或用途（可选）"));
+        merchantInput = edit("例如：工资、某某商店、原付款商户", true);
         merchantInput.setText(expense.merchant);
         root.addView(merchantInput, fieldParams());
 
@@ -151,13 +174,15 @@ public class ExpenseEditorActivity extends Activity {
         noteInput.setText(expense.note);
         root.addView(noteInput, fieldParams());
 
+        reimbursementArea = new LinearLayout(this);
+        reimbursementArea.setOrientation(LinearLayout.VERTICAL);
         reimbursableInput = new CheckBox(this);
         reimbursableInput.setText("这笔钱需要报销");
         reimbursableInput.setTextSize(15);
         reimbursableInput.setTextColor(Ui.INK);
         reimbursableInput.setChecked(expense.reimbursable);
         reimbursableInput.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.GREEN));
-        root.addView(reimbursableInput, matchWrap(0, 6));
+        reimbursementArea.addView(reimbursableInput, matchWrap(0, 6));
 
         eventArea = new LinearLayout(this);
         eventArea.setOrientation(LinearLayout.VERTICAL);
@@ -169,11 +194,27 @@ public class ExpenseEditorActivity extends Activity {
         Button newEvent = secondaryButton("＋ 新建报销事项");
         newEvent.setOnClickListener(v -> showCreateEventDialog());
         eventArea.addView(newEvent, matchWrap(0, 12));
-        root.addView(eventArea);
+        reimbursementArea.addView(eventArea);
+        root.addView(reimbursementArea);
         loadEvents(expense.reimbursementEventId);
         eventArea.setVisibility(reimbursableInput.isChecked() ? View.VISIBLE : View.GONE);
         reimbursableInput.setOnCheckedChangeListener((button, checked) ->
                 eventArea.setVisibility(checked ? View.VISIBLE : View.GONE));
+
+        typeInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String previous = expense.entryType;
+                expense.entryType = position == 1 ? EntryTypes.INCOME :
+                        (position == 2 ? EntryTypes.REFUND : EntryTypes.EXPENSE);
+                String selected = previous.equals(expense.entryType) ? expense.category :
+                        (EntryTypes.REFUND.equals(expense.entryType) ? "退款" :
+                                (EntryTypes.INCOME.equals(expense.entryType) ? "其他收入" : "吃饭"));
+                loadCategories(selected);
+                updateTypeUi();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        updateTypeUi();
 
         root.addView(label("附件材料（图片或 PDF，可多选）"));
         attachmentsArea = new LinearLayout(this);
@@ -216,7 +257,8 @@ public class ExpenseEditorActivity extends Activity {
     }
 
     private void loadCategories(String selected) {
-        categories = database.activeCategories();
+        categories = EntryTypes.EXPENSE.equals(expense.entryType) ?
+                database.activeCategories() : new ArrayList<>(EntryTypes.fixedCategories(expense.entryType));
         if (selected != null && !selected.isEmpty() && !categories.contains(selected)) categories.add(selected);
         categoryInput.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item, categories));
@@ -351,7 +393,8 @@ public class ExpenseEditorActivity extends Activity {
         long cents = parseCents(amountInput.getText().toString());
         if (cents <= 0) { amountInput.setError("请输入正确金额"); amountInput.requestFocus(); return; }
         if (categories.isEmpty()) { Toast.makeText(this, "请先添加一个类别", Toast.LENGTH_SHORT).show(); return; }
-        if (reimbursableInput.isChecked() && events.isEmpty()) {
+        if (EntryTypes.EXPENSE.equals(selectedEntryType()) &&
+                reimbursableInput.isChecked() && events.isEmpty()) {
             Toast.makeText(this, "需要报销的支出必须关联一个事项", Toast.LENGTH_LONG).show();
             showCreateEventDialog();
             return;
@@ -368,11 +411,13 @@ public class ExpenseEditorActivity extends Activity {
             return;
         }
         expense.amountCents = cents;
+        expense.entryType = selectedEntryType();
         expense.category = categoryInput.getSelectedItem().toString();
         expense.merchant = merchantInput.getText().toString().trim();
         expense.note = noteInput.getText().toString().trim();
-        expense.reimbursable = reimbursableInput.isChecked() || expense.reimbursed;
-        if (reimbursableInput.isChecked()) {
+        boolean isExpense = EntryTypes.EXPENSE.equals(expense.entryType);
+        expense.reimbursable = isExpense && (reimbursableInput.isChecked() || expense.reimbursed);
+        if (isExpense && reimbursableInput.isChecked()) {
             expense.reimbursementEventId = events.get(eventInput.getSelectedItemPosition()).id;
         } else if (!expense.reimbursed) {
             expense.reimbursementEventId = 0;
@@ -383,13 +428,30 @@ public class ExpenseEditorActivity extends Activity {
         for (ExpenseAttachment item : localizedPending) {
             database.addAttachment(expense.id, item.uri, item.mimeType, item.displayName);
         }
-        Toast.makeText(this, "已记录 " + Ui.money(cents), Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "已记录" + EntryTypes.label(expense.entryType) + " " + Ui.money(cents),
+                Toast.LENGTH_SHORT).show();
         finish();
     }
 
     private void updateHighlight() {
         if (highlightHint != null) highlightHint.setVisibility(
-                parseCents(amountInput.getText().toString()) > 10000 ? View.VISIBLE : View.GONE);
+                EntryTypes.EXPENSE.equals(selectedEntryType()) &&
+                        parseCents(amountInput.getText().toString()) > 10000 ? View.VISIBLE : View.GONE);
+    }
+
+    private String selectedEntryType() {
+        if (typeInput == null) return expense.entryType;
+        return typeInput.getSelectedItemPosition() == 1 ? EntryTypes.INCOME :
+                (typeInput.getSelectedItemPosition() == 2 ? EntryTypes.REFUND : EntryTypes.EXPENSE);
+    }
+
+    private void updateTypeUi() {
+        boolean isExpense = EntryTypes.EXPENSE.equals(selectedEntryType());
+        if (reimbursementArea != null) reimbursementArea.setVisibility(isExpense ? View.VISIBLE : View.GONE);
+        if (manageCategories != null) manageCategories.setVisibility(isExpense ? View.VISIBLE : View.GONE);
+        if (categoryLabel != null) categoryLabel.setText(isExpense ? "开销类别" :
+                (EntryTypes.REFUND.equals(selectedEntryType()) ? "退款类别" : "收入类别"));
+        updateHighlight();
     }
 
     private TextView label(String value) {
