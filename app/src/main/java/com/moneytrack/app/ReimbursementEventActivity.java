@@ -3,11 +3,9 @@ package com.moneytrack.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
-import android.graphics.Paint;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -73,15 +71,20 @@ public final class ReimbursementEventActivity extends Activity {
         });
         root.addView(merge, margins(0, 14));
 
-        List<Expense> pending = database.expensesForEvent(eventId, false);
-        addSection("未报销明细 · " + pending.size() + " 笔");
-        if (pending.isEmpty()) addEmpty("所有明细都已报销");
-        else for (Expense expense : pending) addExpense(expense, false);
+        List<Expense> pending = database.expensesForEvent(eventId, ReimbursementStatus.PENDING);
+        addSection("待报销 · " + pending.size() + " 笔");
+        if (pending.isEmpty()) addEmpty("暂无待报销明细");
+        else for (Expense expense : pending) addExpense(expense);
 
-        List<Expense> completed = database.expensesForEvent(eventId, true);
-        addSection("已报销明细 · " + completed.size() + " 笔");
+        List<Expense> submitted = database.expensesForEvent(eventId, ReimbursementStatus.SUBMITTED);
+        addSection("已提交材料 · " + submitted.size() + " 笔");
+        if (submitted.isEmpty()) addEmpty("暂无已提交材料");
+        else for (Expense expense : submitted) addExpense(expense);
+
+        List<Expense> completed = database.expensesForEvent(eventId, ReimbursementStatus.REIMBURSED);
+        addSection("已报销 · " + completed.size() + " 笔");
         if (completed.isEmpty()) addEmpty("暂无已报销明细");
-        else for (Expense expense : completed) addExpense(expense, true);
+        else for (Expense expense : completed) addExpense(expense);
     }
 
     private void addSection(String title) {
@@ -89,37 +92,60 @@ public final class ReimbursementEventActivity extends Activity {
         view.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 9)); root.addView(view);
     }
 
-    private void addExpense(Expense expense, boolean checked) {
+    private void addExpense(Expense expense) {
         LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setBackground(Ui.outlined(this, checked ? Ui.PAPER : Ui.CARD, 15, Ui.BORDER));
+        row.setOrientation(LinearLayout.VERTICAL);
+        boolean completed = expense.reimbursementStatus == ReimbursementStatus.REIMBURSED;
+        row.setBackground(Ui.outlined(this, completed ? Ui.PAPER : Ui.CARD, 15, Ui.BORDER));
         Ui.pad(row, 10, 9);
-        CheckBox check = new CheckBox(this);
-        check.setChecked(checked);
-        check.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.GREEN));
-        row.addView(check);
         LinearLayout textArea = new LinearLayout(this);
         textArea.setOrientation(LinearLayout.VERTICAL);
         TextView title = Ui.text(this, ExpenseDisplay.primaryText(expense) + "  " + Ui.money(expense.amountCents),
-                15, checked ? Ui.MUTED : Ui.INK, true);
+                15, completed ? Ui.MUTED : Ui.INK, true);
         title.setMaxLines(2);
-        if (checked) title.setPaintFlags(title.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
         textArea.addView(title);
         textArea.addView(Ui.text(this, ExpenseDisplay.sourceAndDate(expense) + " · 类别：" + expense.category,
                 12, Ui.MUTED, false));
         if (ExpenseDisplay.showNoteBelowPrimary(expense)) {
-            textArea.addView(Ui.text(this, "用途：" + expense.note, 12, checked ? Ui.MUTED : Ui.INK, false));
+            textArea.addView(Ui.text(this, "用途：" + expense.note, 12,
+                    completed ? Ui.MUTED : Ui.INK, false));
         }
-        row.addView(textArea, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(textArea);
         textArea.setOnClickListener(v -> {
             Intent intent = new Intent(this, ExpenseEditorActivity.class);
             intent.putExtra(ExpenseEditorActivity.EXTRA_EXPENSE_ID, expense.id); startActivity(intent);
         });
-        check.setOnCheckedChangeListener((button, value) -> {
-            database.setExpenseReimbursed(expense.id, value); refresh();
-        });
+
+        Button advance = new Button(this);
+        advance.setAllCaps(false);
+        advance.setTextSize(13);
+        advance.setMinHeight(Ui.dp(this, 40));
+        advance.setBackground(Ui.background(this, completed ? Ui.PAPER : Ui.PALE_GREEN, 11));
+        if (expense.reimbursementStatus == ReimbursementStatus.PENDING) {
+            advance.setText("材料已提交");
+            advance.setTextColor(Ui.GREEN);
+            advance.setOnClickListener(v -> advance(expense));
+        } else if (expense.reimbursementStatus == ReimbursementStatus.SUBMITTED) {
+            advance.setText("确认已报销");
+            advance.setTextColor(Ui.GREEN);
+            advance.setOnClickListener(v -> advance(expense));
+        } else {
+            advance.setText("✓ 已报销");
+            advance.setTextColor(Ui.MUTED);
+            advance.setEnabled(false);
+        }
+        row.addView(advance, margins(8, 0));
         SwipeDeleteLayout swipe = new SwipeDeleteLayout(this, row, () -> confirmDelete(expense));
         root.addView(swipe, margins(0, 8));
+    }
+
+    private void advance(Expense expense) {
+        database.advanceExpenseReimbursementStatus(expense.id);
+        android.widget.Toast.makeText(this,
+                expense.reimbursementStatus == ReimbursementStatus.PENDING ?
+                        "已移到“已提交材料”" : "已移到“已报销”",
+                android.widget.Toast.LENGTH_SHORT).show();
+        refresh();
     }
 
     private void confirmDelete(Expense expense) {

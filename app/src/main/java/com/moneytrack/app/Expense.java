@@ -11,6 +11,7 @@ public final class Expense {
     public long expenseTime;
     public boolean reimbursable;
     public boolean reimbursed;
+    public int reimbursementStatus;
     public long reimbursementEventId;
     public long reimbursedAt;
     public String receiptUri;

@@ -131,7 +131,7 @@ public final class CategoryExpensesActivity extends Activity {
         }
 
         StringBuilder status = new StringBuilder();
-        if (expense.reimbursable) status.append(expense.reimbursed ? "已报销" : "待报销");
+        if (expense.reimbursable) status.append(ReimbursementStatus.label(expense.reimbursementStatus));
         if (expense.reimbursementEventId > 0) {
             ReimbursementEvent event = database.getEvent(expense.reimbursementEventId);
             if (event != null) {
@@ -146,7 +146,8 @@ public final class CategoryExpensesActivity extends Activity {
         }
         if (status.length() > 0) {
             TextView statusView = Ui.text(this, status.toString(), 12,
-                    expense.reimbursable && !expense.reimbursed ? Ui.AMBER : Ui.GREEN, true);
+                    expense.reimbursable && expense.reimbursementStatus != ReimbursementStatus.REIMBURSED ?
+                            Ui.AMBER : Ui.GREEN, true);
             statusView.setPadding(0, Ui.dp(this, 7), 0, 0);
             card.addView(statusView);
         }

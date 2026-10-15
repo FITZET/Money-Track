@@ -445,10 +445,12 @@ public final class MainActivity extends Activity {
             startActivity(intent);
         });
         if (showReimburseButton) {
-            Button done = secondaryButton("标记为已报销");
+            Button done = secondaryButton(expense.reimbursementStatus == ReimbursementStatus.PENDING ?
+                    "标记材料已提交" : "确认已报销");
             done.setOnClickListener(v -> {
-                database.markReimbursed(expense.id);
-                Toast.makeText(this, "已收回 " + Ui.money(expense.amountCents), Toast.LENGTH_SHORT).show();
+                database.advanceExpenseReimbursementStatus(expense.id);
+                Toast.makeText(this, expense.reimbursementStatus == ReimbursementStatus.PENDING ?
+                        "已移到“已提交材料”" : "已移到“已报销”", Toast.LENGTH_SHORT).show();
                 showTab(2);
             });
             card.addView(done, matchWrap(10, 0));

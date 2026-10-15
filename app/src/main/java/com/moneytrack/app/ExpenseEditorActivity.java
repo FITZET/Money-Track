@@ -426,7 +426,11 @@ public class ExpenseEditorActivity extends Activity {
         } else if (!expense.reimbursed) {
             expense.reimbursementEventId = 0;
         }
-        if (!expense.reimbursable) { expense.reimbursed = false; expense.reimbursedAt = 0; }
+        if (!expense.reimbursable) {
+            expense.reimbursed = false;
+            expense.reimbursedAt = 0;
+            expense.reimbursementStatus = ReimbursementStatus.PENDING;
+        }
         if (expense.id == 0) expense.id = database.insert(expense); else database.update(expense);
         for (long attachmentId : deletedAttachmentIds) database.deleteAttachment(attachmentId);
         for (ExpenseAttachment item : localizedPending) {

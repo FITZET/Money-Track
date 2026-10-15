@@ -12,7 +12,7 @@ import java.util.List;
 
 public final class ExpenseDatabase extends SQLiteOpenHelper {
     private static final String DATABASE_NAME = "money_track.db";
-    public static final int CURRENT_DATABASE_VERSION = 4;
+    public static final int CURRENT_DATABASE_VERSION = 5;
     private static final String[] DEFAULT_CATEGORIES = {
             "吃饭", "零用", "衣服鞋子", "打车", "住宿", "交通", "其他"
     };
@@ -36,6 +36,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
                 "expense_time INTEGER NOT NULL," +
                 "reimbursable INTEGER NOT NULL DEFAULT 0," +
                 "reimbursed INTEGER NOT NULL DEFAULT 0," +
+                "reimbursement_status INTEGER NOT NULL DEFAULT 0," +
                 "reimbursement_event_id INTEGER NOT NULL DEFAULT 0," +
                 "reimbursed_at INTEGER NOT NULL DEFAULT 0," +
                 "receipt_uri TEXT NOT NULL DEFAULT ''," +
@@ -46,6 +47,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX expenses_type_time_idx ON expenses(entry_type,expense_time DESC)");
         db.execSQL("CREATE INDEX expenses_reimburse_idx ON expenses(reimbursable, reimbursed)");
         db.execSQL("CREATE INDEX expenses_event_idx ON expenses(reimbursement_event_id, reimbursed)");
+        db.execSQL("CREATE INDEX expenses_event_status_idx ON expenses(reimbursement_event_id,reimbursement_status)");
     }
 
     @Override
@@ -65,6 +67,12 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE expenses ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'expense'");
             db.execSQL("CREATE INDEX IF NOT EXISTS expenses_type_time_idx ON expenses(entry_type,expense_time DESC)");
+        }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE expenses ADD COLUMN reimbursement_status INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("UPDATE expenses SET reimbursement_status=2 WHERE reimbursed=1");
+            db.execSQL("CREATE INDEX IF NOT EXISTS expenses_event_status_idx " +
+                    "ON expenses(reimbursement_event_id,reimbursement_status)");
         }
     }
 
@@ -141,7 +149,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     public List<Expense> pendingReimbursements() {
         List<Expense> result = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query("expenses", null,
-                "reimbursable = 1 AND reimbursed = 0", null, null, null,
+                "reimbursable = 1 AND reimbursement_status < 2", null, null, null,
                 "expense_time DESC")) {
             while (cursor.moveToNext()) result.add(fromCursor(cursor));
         }
@@ -151,18 +159,18 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     public List<Expense> ungroupedPendingReimbursements() {
         List<Expense> result = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query("expenses", null,
-                "reimbursable = 1 AND reimbursed = 0 AND reimbursement_event_id = 0",
+                "reimbursable = 1 AND reimbursement_status < 2 AND reimbursement_event_id = 0",
                 null, null, null, "expense_time DESC")) {
             while (cursor.moveToNext()) result.add(fromCursor(cursor));
         }
         return result;
     }
 
-    public List<Expense> expensesForEvent(long eventId, boolean reimbursed) {
+    public List<Expense> expensesForEvent(long eventId, int reimbursementStatus) {
         List<Expense> result = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query("expenses", null,
-                "reimbursement_event_id = ? AND reimbursed = ?",
-                new String[]{String.valueOf(eventId), reimbursed ? "1" : "0"},
+                "reimbursement_event_id = ? AND reimbursement_status = ?",
+                new String[]{String.valueOf(eventId), String.valueOf(reimbursementStatus)},
                 null, null, "expense_time DESC")) {
             while (cursor.moveToNext()) result.add(fromCursor(cursor));
         }
@@ -272,11 +280,26 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     }
 
     public void setExpenseReimbursed(long id, boolean reimbursed) {
+        setExpenseReimbursementStatus(id,
+                reimbursed ? ReimbursementStatus.REIMBURSED : ReimbursementStatus.PENDING);
+    }
+
+    public void advanceExpenseReimbursementStatus(long id) {
         Expense expense = get(id);
-        if (expense == null) return;
+        if (expense == null || !expense.reimbursable ||
+                expense.reimbursementStatus >= ReimbursementStatus.REIMBURSED) return;
+        setExpenseReimbursementStatus(id, expense.reimbursementStatus + 1);
+    }
+
+    public void setExpenseReimbursementStatus(long id, int status) {
+        Expense expense = get(id);
+        if (expense == null || status < ReimbursementStatus.PENDING ||
+                status > ReimbursementStatus.REIMBURSED) return;
         ContentValues values = new ContentValues();
-        values.put("reimbursed", reimbursed ? 1 : 0);
-        values.put("reimbursed_at", reimbursed ? System.currentTimeMillis() : 0L);
+        values.put("reimbursement_status", status);
+        values.put("reimbursed", status == ReimbursementStatus.REIMBURSED ? 1 : 0);
+        values.put("reimbursed_at", status == ReimbursementStatus.REIMBURSED ?
+                System.currentTimeMillis() : 0L);
         getWritableDatabase().update("expenses", values, "id = ?",
                 new String[]{String.valueOf(id)});
         if (expense.reimbursementEventId > 0) refreshEventCompletion(expense.reimbursementEventId);
@@ -345,9 +368,9 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         List<ReimbursementEvent> result = new ArrayList<>();
         String sql = "SELECT * FROM (SELECT e.id,e.title,e.note,e.created_at,e.completed_at," +
                 "COALESCE(SUM(x.amount_cents),0) total_cents," +
-                "COALESCE(SUM(CASE WHEN x.reimbursed=0 THEN x.amount_cents ELSE 0 END),0) pending_cents," +
+                "COALESCE(SUM(CASE WHEN x.reimbursement_status<2 THEN x.amount_cents ELSE 0 END),0) pending_cents," +
                 "COUNT(x.id) total_count," +
-                "COALESCE(SUM(CASE WHEN x.reimbursed=0 THEN 1 ELSE 0 END),0) pending_count " +
+                "COALESCE(SUM(CASE WHEN x.reimbursement_status<2 THEN 1 ELSE 0 END),0) pending_count " +
                 "FROM reimbursement_events e LEFT JOIN expenses x ON x.reimbursement_event_id=e.id " +
                 "GROUP BY e.id) e" + (where == null ? "" : " WHERE " + where) +
                 (orderBy == null ? "" : " ORDER BY " + orderBy);
@@ -375,6 +398,8 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         ContentValues expenses = new ContentValues();
         expenses.put("reimbursed", reimbursed ? 1 : 0);
         expenses.put("reimbursed_at", reimbursed ? System.currentTimeMillis() : 0L);
+        expenses.put("reimbursement_status", reimbursed ?
+                ReimbursementStatus.REIMBURSED : ReimbursementStatus.PENDING);
         getWritableDatabase().update("expenses", expenses, "reimbursement_event_id = ?",
                 new String[]{String.valueOf(eventId)});
         ContentValues event = new ContentValues();
@@ -445,7 +470,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
     }
 
     public long pendingTotal() {
-        return sum("reimbursable = 1 AND reimbursed = 0", null);
+        return sum("reimbursable = 1 AND reimbursement_status < 2", null);
     }
 
     private long sum(String selection, String[] args) {
@@ -477,6 +502,7 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         values.put("expense_time", expense.expenseTime);
         values.put("reimbursable", expense.reimbursable ? 1 : 0);
         values.put("reimbursed", expense.reimbursed ? 1 : 0);
+        values.put("reimbursement_status", expense.reimbursementStatus);
         values.put("reimbursement_event_id", expense.reimbursementEventId);
         values.put("reimbursed_at", expense.reimbursedAt);
         values.put("receipt_uri", safe(expense.receiptUri));
@@ -495,6 +521,8 @@ public final class ExpenseDatabase extends SQLiteOpenHelper {
         expense.expenseTime = cursor.getLong(cursor.getColumnIndexOrThrow("expense_time"));
         expense.reimbursable = cursor.getInt(cursor.getColumnIndexOrThrow("reimbursable")) == 1;
         expense.reimbursed = cursor.getInt(cursor.getColumnIndexOrThrow("reimbursed")) == 1;
+        expense.reimbursementStatus = cursor.getInt(
+                cursor.getColumnIndexOrThrow("reimbursement_status"));
         expense.reimbursementEventId = cursor.getLong(cursor.getColumnIndexOrThrow("reimbursement_event_id"));
         expense.reimbursedAt = cursor.getLong(cursor.getColumnIndexOrThrow("reimbursed_at"));
         expense.receiptUri = cursor.getString(cursor.getColumnIndexOrThrow("receipt_uri"));
