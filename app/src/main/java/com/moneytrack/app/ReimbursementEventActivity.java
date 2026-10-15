@@ -100,13 +100,16 @@ public final class ReimbursementEventActivity extends Activity {
         row.addView(check);
         LinearLayout textArea = new LinearLayout(this);
         textArea.setOrientation(LinearLayout.VERTICAL);
-        TextView title = Ui.text(this, expense.category + "  " + Ui.money(expense.amountCents),
+        TextView title = Ui.text(this, ExpenseDisplay.primaryText(expense) + "  " + Ui.money(expense.amountCents),
                 15, checked ? Ui.MUTED : Ui.INK, true);
+        title.setMaxLines(2);
         if (checked) title.setPaintFlags(title.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
         textArea.addView(title);
-        String detail = Ui.date(expense.expenseTime) +
-                (expense.merchant.isEmpty() ? "" : " · " + expense.merchant);
-        textArea.addView(Ui.text(this, detail, 12, Ui.MUTED, false));
+        textArea.addView(Ui.text(this, ExpenseDisplay.sourceAndDate(expense) + " · 类别：" + expense.category,
+                12, Ui.MUTED, false));
+        if (ExpenseDisplay.showNoteBelowPrimary(expense)) {
+            textArea.addView(Ui.text(this, "用途：" + expense.note, 12, checked ? Ui.MUTED : Ui.INK, false));
+        }
         row.addView(textArea, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         textArea.setOnClickListener(v -> {
             Intent intent = new Intent(this, ExpenseEditorActivity.class);

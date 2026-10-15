@@ -410,10 +410,9 @@ public final class MainActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        String typePrefix = EntryTypes.EXPENSE.equals(expense.entryType) ? "" :
-                EntryTypes.label(expense.entryType) + " · ";
-        TextView category = Ui.text(this, typePrefix + expense.category, 16, Ui.INK, true);
-        row.addView(category, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView title = Ui.text(this, ExpenseDisplay.primaryText(expense), 16, Ui.INK, true);
+        title.setMaxLines(2);
+        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
         String amountPrefix = expense.amountCents == 0 ? "" : (outgoing ? "−" : "+");
         TextView amount = Ui.text(this, amountPrefix + Ui.money(expense.amountCents), 18,
@@ -421,13 +420,14 @@ public final class MainActivity extends Activity {
         row.addView(amount);
         card.addView(row);
 
-        StringBuilder meta = new StringBuilder(Ui.date(expense.expenseTime));
-        if (!expense.source.isEmpty()) meta.append(" · ").append(expense.source);
-        if (!expense.merchant.isEmpty()) meta.append(" · ").append(expense.merchant);
-        TextView details = Ui.text(this, meta.toString(), 12, Ui.MUTED, false);
+        TextView details = Ui.text(this, ExpenseDisplay.sourceAndDate(expense), 12, Ui.MUTED, false);
         details.setPadding(0, Ui.dp(this, 5), 0, 0);
         card.addView(details);
-        if (!expense.note.isEmpty()) {
+        TextView category = Ui.text(this, (EntryTypes.EXPENSE.equals(expense.entryType) ? "" :
+                EntryTypes.label(expense.entryType) + " · ") + expense.category, 11, Ui.MUTED, false);
+        category.setPadding(0, Ui.dp(this, 3), 0, 0);
+        card.addView(category);
+        if (ExpenseDisplay.showNoteBelowPrimary(expense)) {
             TextView note = Ui.text(this, expense.note, 13, Ui.INK, false);
             note.setPadding(0, Ui.dp(this, 7), 0, 0);
             card.addView(note);

@@ -105,9 +105,9 @@ public final class CategoryExpensesActivity extends Activity {
 
         LinearLayout amountRow = new LinearLayout(this);
         amountRow.setGravity(Gravity.CENTER_VERTICAL);
-        String title = expense.merchant.isEmpty() ? expense.source : expense.merchant;
-        if (title.isEmpty()) title = EntryTypes.label(expense.entryType);
-        amountRow.addView(Ui.text(this, title, 15, Ui.INK, true),
+        TextView title = Ui.text(this, ExpenseDisplay.primaryText(expense), 15, Ui.INK, true);
+        title.setMaxLines(2);
+        amountRow.addView(title,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         boolean outgoing = EntryTypes.EXPENSE.equals(expense.entryType);
         String amountPrefix = expense.amountCents == 0 ? "" : (outgoing ? "−" : "+");
@@ -115,11 +115,16 @@ public final class CategoryExpensesActivity extends Activity {
                 outgoing ? (expense.amountCents > 10000 ? Ui.AMBER : Ui.INK) : Ui.GREEN, true));
         card.addView(amountRow);
 
-        TextView date = Ui.text(this, Ui.date(expense.expenseTime), 12, Ui.MUTED, false);
-        date.setPadding(0, Ui.dp(this, 5), 0, 0);
-        card.addView(date);
+        TextView details = Ui.text(this, ExpenseDisplay.sourceAndDate(expense), 12, Ui.MUTED, false);
+        details.setPadding(0, Ui.dp(this, 5), 0, 0);
+        card.addView(details);
 
-        if (!expense.note.isEmpty()) {
+        TextView category = Ui.text(this, (EntryTypes.EXPENSE.equals(expense.entryType) ? "" :
+                EntryTypes.label(expense.entryType) + " · ") + expense.category, 11, Ui.MUTED, false);
+        category.setPadding(0, Ui.dp(this, 3), 0, 0);
+        card.addView(category);
+
+        if (ExpenseDisplay.showNoteBelowPrimary(expense)) {
             TextView note = Ui.text(this, expense.note, 13, Ui.INK, false);
             note.setPadding(0, Ui.dp(this, 7), 0, 0);
             card.addView(note);
